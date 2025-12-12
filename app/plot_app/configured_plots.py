@@ -498,6 +498,22 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
     if data_plot.finalize() is not None: plots.append(data_plot)
 
+    # actuator controls 1 (torque + thrust)
+    # (only present on VTOL, Fixed-wing config)
+    data_plot = DataPlot(data, plot_config, actuator_controls_1.torque_sp_topic,
+                         y_start=0, title='Actuator Controls 1 (VTOL in Fixed-Wing mode)',
+                         plot_height='small', changed_params=changed_params,
+                         x_range=x_range)
+    data_plot.add_graph(actuator_controls_1.torque_axes_field_names,
+                        colors8[0:3], ['Roll', 'Pitch', 'Yaw'], mark_nan=True)
+    data_plot.change_dataset(actuator_controls_1.thrust_sp_topic,
+                             actuator_controls_1.topic_instance)
+    if actuator_controls_1.thrust_x is not None:
+        data_plot.add_graph([lambda data: ('thrust', actuator_controls_1.thrust_x)],
+                            colors8[3:4], ['Thrust (forward)'], mark_nan=True)
+    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+    if data_plot.finalize() is not None: plots.append(data_plot)
+
     # actuator controls (Main) FFT (for filter & output noise analysis)
     data_plot = DataPlotFFT(data, plot_config, actuator_controls_0.torque_sp_topic,
                             title='Actuator Controls FFT', y_range = Range1d(0, 0.01))
@@ -555,22 +571,6 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                     ulog.initial_parameters['IMU_GYRO_NF_FREQ'],
                     'IMU_GYRO_NF_FREQ', 70)
 
-    if data_plot.finalize() is not None: plots.append(data_plot)
-
-    # actuator controls 1 (torque + thrust)
-    # (only present on VTOL, Fixed-wing config)
-    data_plot = DataPlot(data, plot_config, actuator_controls_1.torque_sp_topic,
-                         y_start=0, title='Actuator Controls 1 (VTOL in Fixed-Wing mode)',
-                         plot_height='small', changed_params=changed_params,
-                         x_range=x_range)
-    data_plot.add_graph(actuator_controls_1.torque_axes_field_names,
-                        colors8[0:3], ['Roll', 'Pitch', 'Yaw'], mark_nan=True)
-    data_plot.change_dataset(actuator_controls_1.thrust_sp_topic,
-                             actuator_controls_1.topic_instance)
-    if actuator_controls_1.thrust_x is not None:
-        data_plot.add_graph([lambda data: ('thrust', actuator_controls_1.thrust_x)],
-                            colors8[3:4], ['Thrust (forward)'], mark_nan=True)
-    plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     if dynamic_control_alloc:
