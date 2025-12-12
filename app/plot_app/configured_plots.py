@@ -172,12 +172,49 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             pass
         curdoc().template_variables['has_position_data'] = True
 
+    # # DEBUG: dump initial parameters
+    # print("### DEBUG dump ulog.initial_parameters ###")
+    # for name, value in sorted(ulog.initial_parameters.items()):
+    #     print(f"[INIT] {name} = {value} ({type(value)})")
+    # print("### DEBUG end initial_parameters ###")
+    # # initialize parameter changes
+    # changed_params = None
+    # if not 'replay' in ulog.msg_info_dict:  # replay can have many param changes
+    #     if len(ulog.changed_parameters) > 0:
+    #         print("### DEBUG dump ulog.changed_parameters ###")
+    #         for i, (t, name, value) in enumerate(ulog.changed_parameters):
+    #             print(f"[{i:02d}] t={t} name={name} value={value} type={type(value)}")
+    #         print("### DEBUG end dump ###")
+
+    #         changed_params = ulog.changed_parameters
+    #         plots.append(None)  # save space for the param change button
     # initialize parameter changes
+
     changed_params = None
-    if not 'replay' in ulog.msg_info_dict: # replay can have many param changes
+    if not 'replay' in ulog.msg_info_dict:  # replay can have many param changes
         if len(ulog.changed_parameters) > 0:
-            changed_params = ulog.changed_parameters
-            plots.append(None) # save space for the param change button
+            raw_changed = ulog.changed_parameters
+            print(f"### DEBUG raw ulog.changed_parameters = {len(raw_changed)}")
+
+            print("### DEBUG initial_parameters (only params in changed_parameters) ###")
+            changed_param_names = {name for _, name, _ in raw_changed}
+            for name in sorted(changed_param_names):
+                if name in ulog.initial_parameters:
+                    v = ulog.initial_parameters[name]
+                    print(f"[INIT] {name} = {v} ({type(v)})")
+                else:
+                    print(f"[INIT] {name} = <NOT IN initial_parameters>")
+
+            print("### DEBUG end initial_parameters (filtered) ###")
+            changed_params = filter_effective_param_changes(
+                raw_changed,
+                ulog.initial_parameters,
+                eps=0.0,
+                debug=True
+            )
+
+            print(f"### DEBUG changed_params after effective-filter = {len(changed_params)}")
+            plots.append(None)  # save space for the param change button
 
     ### Add all data plots ###
 

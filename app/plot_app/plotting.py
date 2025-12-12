@@ -96,6 +96,43 @@ def add_virtual_fifo_topic_data(ulog, topic_name, instance=0):
             print(type(error), "(fifo data):", error)
         return False
 
+def filter_effective_param_changes(changed_parameters, initial_parameters, eps=0.0, debug=False):
+    # Build last value map from initial parameters (baseline)
+    last_value_by_name = dict(initial_parameters) if initial_parameters else {}
+
+    out = []
+    if debug:
+        print("### DEBUG filter_effective_param_changes ###")
+        print(f"### DEBUG baseline(initial_parameters) = {len(last_value_by_name)}")
+        print(f"### DEBUG input changed_parameters = {len(changed_parameters)}")
+
+    for i, (t, name, value) in enumerate(changed_parameters):
+        prev = last_value_by_name.get(name, None)
+
+        # Compare with tolerance for float if needed
+        same = False
+        if prev is None:
+            same = False
+        else:
+            if isinstance(prev, float) or isinstance(value, float):
+                same = abs(float(prev) - float(value)) <= eps
+            else:
+                same = (prev == value)
+
+        if debug:
+            print(f"[{i:02d}] {name}: prev={prev} ({type(prev)}), curr={value} ({type(value)}), t={t} -> {'SKIP' if same else 'KEEP'}")
+
+        if same:
+            # No effective change -> ignore this event
+            continue
+
+        # Effective change -> keep and update baseline
+        out.append((t, name, value))
+        last_value_by_name[name] = value
+
+    if debug:
+        print(f"### DEBUG output effective changes = {len(out)}")
+    return out
 
 def plot_parameter_changes(p, plots_height, changed_parameters):
     """ plot changed parameters as text with value into bokeh plot p """
