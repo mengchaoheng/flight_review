@@ -200,8 +200,8 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
             changed_param_names = {name for _, name, _ in raw_changed}
             for name in sorted(changed_param_names):
                 if name in ulog.initial_parameters:
-                    v = ulog.initial_parameters[name]
-                    print(f"[INIT] {name} = {v} ({type(v)})")
+                    value = ulog.initial_parameters[name]
+                    print(f"[INIT] {name} = {value} ({type(value)})")
                 else:
                     print(f"[INIT] {name} = <NOT IN initial_parameters>")
 
