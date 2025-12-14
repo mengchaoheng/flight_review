@@ -177,7 +177,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # for name, value in sorted(ulog.initial_parameters.items()):
     #     print(f"[INIT] {name} = {value} ({type(value)})")
     # print("### DEBUG end initial_parameters ###")
-    # # initialize parameter changes
+    # 1.initialize parameter changes
     # changed_params = None
     # if not 'replay' in ulog.msg_info_dict:  # replay can have many param changes
     #     if len(ulog.changed_parameters) > 0:
@@ -188,8 +188,8 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
     #         changed_params = ulog.changed_parameters
     #         plots.append(None)  # save space for the param change button
-    # initialize parameter changes
 
+    # 2.initialize parameter changes
     changed_params = None
     if not 'replay' in ulog.msg_info_dict:  # replay can have many param changes
         if len(ulog.changed_parameters) > 0:
@@ -539,7 +539,7 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     # (only present on VTOL, Fixed-wing config)
     data_plot = DataPlot(data, plot_config, actuator_controls_1.torque_sp_topic,
                          y_start=0, title='Actuator Controls 1 (VTOL in Fixed-Wing mode)',
-                         plot_height='small', changed_params=changed_params,
+                         plot_height='small', changed_params=changed_params, topic_instance=1,
                          x_range=x_range)
     data_plot.add_graph(actuator_controls_1.torque_axes_field_names,
                         colors8[0:3], ['Roll', 'Pitch', 'Yaw'], mark_nan=True)
