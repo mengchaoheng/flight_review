@@ -3,6 +3,8 @@
 import re
 from html import escape
 
+import numpy as np
+
 from bokeh.layouts import column
 from bokeh.models import Range1d
 from bokeh.models.widgets import Button
@@ -22,7 +24,6 @@ from vtol_tailsitter import *
 
 #pylint: disable=cell-var-from-loop, undefined-loop-variable,
 #pylint: disable=consider-using-enumerate,too-many-statements
-
 
 
 def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
@@ -390,7 +391,11 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                              plot_height='small', changed_params=changed_params,
                              x_range=x_range)
         data_plot.add_graph(
-            [lambda data: ('latency', 1e-3*(data['timestamp'] - data['timestamp_sample']))],
+            # ULog timestamp fields are uint64. Cast before subtracting so samples
+            # timestamped after publication remain negative instead of underflowing
+            # to approximately 1.84e16 ms.
+            [lambda data: ('latency', 1e-3 * (data['timestamp'].astype('int64')
+                                              - data['timestamp_sample'].astype('int64')))],
             colors3, ['VIO Latency'], mark_nan=True)
         plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
 
@@ -447,9 +452,38 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
                              title='Manual Control Inputs (Radio or Joystick)',
                              plot_height='small', y_range=Range1d(-1.1, 1.1),
                              changed_params=changed_params, x_range=x_range)
-        data_plot.add_graph(manual_control_sp_controls + ['aux1', 'aux2'], colors8[0:6],
-                            ['Y / Roll', 'X / Pitch', 'Yaw',
-                             'Throttle ' + manual_control_sp_throttle_range, 'Aux1', 'Aux2'])
+        # manual_control_setpoint contains mapped control functions, not all
+        # physical RC channels. Plot every auxiliary function that exists in
+        # the message so Aux3..Aux6 are not silently omitted.
+        manual_aux_fields = [f'aux{i}' for i in range(1, 7)
+                             if data_plot.dataset is not None
+                             and f'aux{i}' in data_plot.dataset.data]
+        manual_control_fields = manual_control_sp_controls + manual_aux_fields
+        manual_control_legends = [
+            'Y / Roll', 'X / Pitch', 'Yaw',
+            'Throttle ' + manual_control_sp_throttle_range
+        ] + [field.upper().replace('AUX', 'Aux') for field in manual_aux_fields]
+        data_plot.add_graph(
+            manual_control_fields,
+            [colors8[i % len(colors8)] for i in range(len(manual_control_fields))],
+            manual_control_legends,
+            mark_nan=True)
+
+        # INDI uses the calibrated/normalized rc_channels values directly.
+        # When this topic is present in a log, show the exact RC11/RC12 values
+        # used by the INDI trigger paths (channels[10] and channels[11]).
+        if any(elem.name == 'rc_channels' for elem in data):
+            data_plot.change_dataset('rc_channels')
+            if data_plot.dataset is not None:
+                rc_channel_fields = ['channels[10]', 'channels[11]']
+                if all(field in data_plot.dataset.data for field in rc_channel_fields):
+                    first_rc_color = len(manual_control_fields)
+                    data_plot.add_graph(
+                        rc_channel_fields,
+                        [colors8[(first_rc_color + i) % len(colors8)] for i in range(2)],
+                        ['RC11 (rc_channels)', 'RC12 (rc_channels)'],
+                        mark_nan=True)
+
         data_plot.change_dataset(manual_control_switches_topic)
         data_plot.add_graph([lambda data: ('mode_slot', data['mode_slot']/6),
                              lambda data: ('kill_switch', data['kill_switch'] == 1)],
@@ -477,6 +511,40 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
         data_plot.add_graph(['channels['+str(i)+']' for i in range(num_rc_channels)],
                             colors8[0:num_rc_channels], legends, mark_nan=True)
         plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+
+        if data_plot.finalize() is not None: plots.append(data_plot)
+
+    # INDI activation flags. These show whether each INDI controller actually
+    # produced its output, rather than only showing the RC request signal.
+    has_local_position_setpoint = any(
+        elem.name == 'vehicle_local_position_setpoint' for elem in data)
+    has_rate_ctrl_status = any(elem.name == 'rate_ctrl_status' for elem in data)
+    if has_local_position_setpoint or has_rate_ctrl_status:
+        indi_topic = ('vehicle_local_position_setpoint'
+                      if has_local_position_setpoint else 'rate_ctrl_status')
+        data_plot = DataPlot(data, plot_config, indi_topic,
+                             title='INDI Status',
+                             y_axis_label='Active (0/1)',
+                             y_range=Range1d(-0.1, 1.1), plot_height='small',
+                             changed_params=changed_params, x_range=x_range)
+
+        if (data_plot.dataset is not None
+                and 'acc_indi_active' in data_plot.dataset.data):
+            data_plot.add_graph(
+                ['acc_indi_active'],
+                colors8[0:1], ['Acceleration INDI'],
+                use_downsample=False, use_step_lines=True,
+                break_on_timestamp_gaps=True)
+
+        if has_rate_ctrl_status:
+            data_plot.change_dataset('rate_ctrl_status')
+            if (data_plot.dataset is not None
+                    and 'indi_active' in data_plot.dataset.data):
+                data_plot.add_graph(
+                    ['indi_active'],
+                    colors8[1:2], ['Rate INDI'],
+                    use_downsample=False, use_step_lines=True,
+                    break_on_timestamp_gaps=True)
 
         if data_plot.finalize() is not None: plots.append(data_plot)
 
@@ -558,9 +626,12 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     if data_plot.finalize() is not None: plots.append(data_plot)
 
     # actuator controls 1 (torque + thrust)
-    # (only present on VTOL, Fixed-wing config)
+    # Used by VTOL fixed-wing mode and by DuctedFan airframes (CA_AIRFRAME 16/17).
+    actuator_controls_1_title = 'Actuator Controls 1 (VTOL in Fixed-Wing mode)'
+    if ulog.initial_parameters.get('CA_AIRFRAME') in (16, 17):
+        actuator_controls_1_title = 'Actuator Controls 1 (DuctedFan)'
     data_plot = DataPlot(data, plot_config, actuator_controls_1.torque_sp_topic,
-                         y_start=0, title='Actuator Controls 1 (VTOL in Fixed-Wing mode)',
+                         y_start=0, title=actuator_controls_1_title,
                          plot_height='small', changed_params=changed_params,
                          topic_instance=actuator_controls_1.topic_instance,
                          x_range=x_range)

@@ -507,7 +507,8 @@ class DataPlot:
 
 
     def add_graph(self, field_names, colors, legends, use_downsample=True,
-                  mark_nan=False, use_step_lines=False):
+                  mark_nan=False, use_step_lines=False,
+                  break_on_timestamp_gaps=False):
         """ add 1 or more lines to a graph
 
         field_names can be a list of fields from the data set, or a list of
@@ -516,6 +517,8 @@ class DataPlot:
         :param mark_nan: if True, add an indicator to the plot when one of the graphs is NaN
         :param use_step_lines: if True, render step lines (after each point)
         instead of rendering a straight line to the next point
+        :param break_on_timestamp_gaps: if True, break lines when the gap
+        between samples is larger than the normal sampling interval
         """
         if self._had_error: return
         try:
@@ -523,6 +526,23 @@ class DataPlot:
             data_set = {}
             data_set['timestamp'] = self._cur_dataset.data['timestamp']
             field_names_expanded = self._expand_field_names(field_names, data_set)
+
+            if break_on_timestamp_gaps and len(data_set['timestamp']) > 2:
+                timestamps = np.asarray(data_set['timestamp'], dtype=np.int64)
+                intervals = np.diff(timestamps)
+                positive_intervals = intervals[intervals > 0]
+
+                if len(positive_intervals) > 0:
+                    normal_interval = np.median(positive_intervals)
+                    gap_indexes = np.flatnonzero(
+                        intervals > normal_interval * 1.5) + 1
+
+                    # NaN makes Bokeh break the line. This is applied only to
+                    # the requested graph fields, not to the timestamps.
+                    for field_name in field_names_expanded:
+                        data_set[field_name] = np.asarray(
+                            data_set[field_name], dtype=float).copy()
+                        data_set[field_name][gap_indexes] = np.nan
 
             if mark_nan:
                 # look through the data to find NaN's and store their timestamps
@@ -1015,4 +1035,3 @@ class DataPlotFFT(DataPlot):
                       text=label, y_units='screen', level='glyph',
                       text_font_size='8pt', text_color=mark_color)
         p.add_layout(label)
-
