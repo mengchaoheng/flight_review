@@ -13,6 +13,7 @@ from bokeh.io import curdoc
 from config import *
 from helper import *
 from leaflet import ulog_to_polyline
+from mpc_status import get_mpc_status_plot
 from plotting import *
 from plotted_tables import (
     get_logged_messages, get_changed_parameters, get_connected_devices,
@@ -548,6 +549,11 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
         if data_plot.finalize() is not None: plots.append(data_plot)
 
+
+    mpc_status_plot = get_mpc_status_plot(
+        data, plot_config, changed_params=changed_params, x_range=x_range)
+    if mpc_status_plot is not None:
+        plots.append(mpc_status_plot)
 
     # actuator controls 0
     data_plot = DataPlot(data, plot_config, actuator_controls_0.torque_sp_topic,
