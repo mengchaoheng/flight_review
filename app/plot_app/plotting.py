@@ -26,6 +26,31 @@ TOOLS = "pan,wheel_zoom,box_zoom,reset,save"
 ACTIVE_SCROLL_TOOLS = "wheel_zoom"
 
 
+def compact_step_data(data):
+    """Keep step transitions, NaN gaps and endpoints without repeated samples.
+
+    Long constant status traces with NaN gaps can overflow BokehJS's spatial
+    index sorter. Repeated interior values add no information to a step plot.
+    Keep both sides of every transition so gap boundaries remain unchanged.
+    """
+    size = len(data['timestamp'])
+    if size < 3:
+        return dict(data)
+
+    keep = np.zeros(size, dtype=bool)
+    keep[0] = keep[-1] = True
+    for key, values in data.items():
+        if key == 'timestamp':
+            continue
+        values = np.asarray(values)
+        same_nan = np.isnan(values[1:]) & np.isnan(values[:-1])
+        changed = (values[1:] != values[:-1]) & ~same_nan
+        keep[:-1] |= changed
+        keep[1:] |= changed
+
+    return {key: np.asarray(values)[keep] for key, values in data.items()}
+
+
 def plot_dropouts(p, dropouts, min_value, show_hover_tooltips=False):
     """ plot small rectangles with given min_value offset """
 
@@ -573,6 +598,9 @@ class DataPlot:
                                       source=source)
                     p.add_layout(labels)
 
+
+            if use_step_lines and break_on_timestamp_gaps:
+                data_set = compact_step_data(data_set)
 
             if use_downsample:
                 # we directly pass the data_set, downsample and then create the

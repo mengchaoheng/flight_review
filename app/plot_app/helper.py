@@ -350,7 +350,9 @@ def load_ulog_file(file_name):
                   'position_setpoint_triplet', 'vehicle_attitude_groundtruth',
                   'vehicle_local_position_groundtruth', 'vehicle_visual_odometry',
                   'vehicle_status', 'airspeed', 'airspeed_validated', 'manual_control_setpoint',
-                  'rate_ctrl_status', 'om_mpc_status', 'om_mpc_indi_status',
+                  'rate_ctrl_status', 'om_mpc_control_status', 'om_mpc_disturbance',
+                  'om_mpc_command', 'control_allocator_diagnostics', 'control_allocator_status',
+                  'om_mpc_status', 'om_mpc_indi_status',  # historical ULog schemas
                   'vehicle_air_data',
                   'vehicle_magnetometer', 'system_power', 'tecs_status',
                   'sensor_baro', 'sensor_accel', 'sensor_accel_fifo',

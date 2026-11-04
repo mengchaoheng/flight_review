@@ -14,6 +14,7 @@ from config import *
 from helper import *
 from leaflet import ulog_to_polyline
 from mpc_status import get_mpc_status_plot
+from execution_time import get_execution_time_plot
 from plotting import *
 from plotted_tables import (
     get_logged_messages, get_changed_parameters, get_connected_devices,
@@ -539,10 +540,16 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
 
         if has_rate_ctrl_status:
             data_plot.change_dataset('rate_ctrl_status')
-            if (data_plot.dataset is not None
-                    and 'indi_active' in data_plot.dataset.data):
+            rate_indi_field = None
+            if data_plot.dataset is not None:
+                # ULogs embed their schema: prefer the explicit new name,
+                # retaining the old field for historical flights.
+                rate_indi_field = next((name for name in
+                                        ('rate_indi_active', 'indi_active')
+                                        if name in data_plot.dataset.data), None)
+            if rate_indi_field is not None:
                 data_plot.add_graph(
-                    ['indi_active'],
+                    [rate_indi_field],
                     colors8[1:2], ['Rate INDI'],
                     use_downsample=False, use_step_lines=True,
                     break_on_timestamp_gaps=True)
@@ -1091,6 +1098,12 @@ def generate_plots(ulog, px4_ulog, db_data, vehicle_data, link_to_3d_page,
     except (KeyError, IndexError) as error:
         print('Error in failsafe plot: '+str(error))
 
+
+    # Recorded computation times, retaining each stream's own sample timestamps.
+    data_plot = get_execution_time_plot(data, plot_config, changed_params, x_range)
+    if data_plot is not None:
+        plot_flight_modes_background(data_plot, flight_mode_changes, vtol_states)
+        plots.append(data_plot)
 
     # cpu load
     data_plot = DataPlot(data, plot_config, 'cpuload',

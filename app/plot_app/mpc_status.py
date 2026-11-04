@@ -4,7 +4,7 @@ import numpy as np
 from bokeh.models import FixedTicker, Range1d
 
 from config import colors8
-from plotting import DataPlot
+from plotting import DataPlot, compact_step_data
 
 
 def _break_status_gaps(renderer, field):
@@ -35,16 +35,28 @@ def _break_status_gaps(renderer, field):
 def get_mpc_status_plot(data, plot_config, changed_params=None, x_range=None):
     """Return a status plot, or None when no supported flags were logged.
 
-    Use final arbitration for MPC/INDI application and the bridge's validity
+    Use final arbitration for MPC/INDI application and dedicated disturbance validity
     flag for disturbance feedback. Separate 0/1 lanes keep overlapping active
     intervals visible. Never extend a stopped topic to the end of the flight.
     """
     datasets = {topic.name: topic for topic in data if topic.multi_id == 0}
+    # New firmware has explicit final-application names. Historical ULogs
+    # retain their embedded schema; never infer application from INDI diagnostics.
+    if 'om_mpc_control_status' in datasets:
+        status_topic = 'om_mpc_control_status'
+        mpc_field, indi_field = 'mpc_active', 'translational_indi_active'
+    else:
+        status_topic = 'om_mpc_status'
+        mpc_field, indi_field = 'active', 'acceleration_indi_active'
+    if 'om_mpc_disturbance' in datasets:
+        feedback_topic, feedback_field = 'om_mpc_disturbance', 'valid'
+    else:
+        feedback_topic, feedback_field = 'om_mpc_indi_status', 'disturbance_valid'
     fields = [
-        ('om_mpc_status', 'active', 'MPC applied', 'MPC', colors8[2]),
-        ('om_mpc_status', 'acceleration_indi_active',
-         'Middle-layer acc INDI applied', 'acc INDI', colors8[0]),
-        ('om_mpc_indi_status', 'disturbance_valid',
+        (status_topic, mpc_field, 'MPC applied', 'MPC', colors8[2]),
+        (status_topic, indi_field,
+         'Translational INDI applied', 'Trans. INDI', colors8[0]),
+        (feedback_topic, feedback_field,
          'Disturbance feedback valid', 'Feedback', colors8[1]),
     ]
     available = [
@@ -56,7 +68,7 @@ def get_mpc_status_plot(data, plot_config, changed_params=None, x_range=None):
         return None
 
     data_plot = DataPlot(
-        data, plot_config, available[0][0], title='MPC Status',
+        data, plot_config, available[0][0], title='MPC Control Status',
         y_axis_label='Status (separate 0/1 lanes)',
         y_range=Range1d(-0.25, 2 * len(available) - 0.75),
         changed_params=changed_params, x_range=x_range)
@@ -68,14 +80,16 @@ def get_mpc_status_plot(data, plot_config, changed_params=None, x_range=None):
             [lambda values, key=field, lane=offset:
              (key, np.asarray(values[key], dtype=float) + lane)],
             [color], [legend], use_downsample=False, use_step_lines=True)
-        _break_status_gaps(data_plot.bokeh_plot.renderers[-1], field)
+        renderer = data_plot.bokeh_plot.renderers[-1]
+        _break_status_gaps(renderer, field)
+        renderer.data_source.data = compact_step_data(renderer.data_source.data)
         tick_labels[offset] = label + ': 0'
         tick_labels[offset + 1] = label + ': 1'
 
     if data_plot.finalize() is None:
         return None
     plot = data_plot.bokeh_plot
-    plot.name = 'mpc_status'
+    plot.name = 'mpc_control_status'
     legend = plot.legend[0]
     plot.center = [item for item in plot.center if item is not legend]
     legend.orientation = 'horizontal'
